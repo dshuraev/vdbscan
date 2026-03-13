@@ -1,0 +1,43 @@
+[package]
+name = "vdbscan-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vdbscan = { path = ".." }
+
+[[bin]]
+name = "fuzz_voxel_no_panic"
+path = "fuzz_targets/fuzz_voxel_no_panic.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_dbscan_no_panic"
+path = "fuzz_targets/fuzz_dbscan_no_panic.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_dbscan_invariants"
+path = "fuzz_targets/fuzz_dbscan_invariants.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_label_noise_consistency"
+path = "fuzz_targets/fuzz_label_noise_consistency.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

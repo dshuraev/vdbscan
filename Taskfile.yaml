@@ -9,6 +9,10 @@ vars:
   DENY_CARGO_HOME: "{{.TASK_CACHE_DIR}}/cargo-home"
   DENY_CARGO_DENY_HOME: "{{.TASK_CACHE_DIR}}/cargo-deny"
   FUZZ_TARGETS:
+    - fuzz_voxel_no_panic.rs
+    - fuzz_dbscan_no_panic.rs
+    - fuzz_dbscan_invariants.rs
+    - fuzz_label_noise_consistency.rs
 
 tasks:
   rust:components:stable:
