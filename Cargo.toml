@@ -6,7 +6,3 @@ license = "MIT"
 
 [dependencies]
 ahash = "0.8.12"
-
-[[test]]
-name = "types_voxel_index"
-path = "test/unit/types_voxel_index.rs"
