@@ -1,0 +1,169 @@
+version: "3"
+
+vars:
+  STABLE_TOOLCHAIN: 1.89.0-x86_64-unknown-linux-gnu
+  NIGHTLY_TOOLCHAIN: nightly-2025-10-31-x86_64-unknown-linux-gnu
+  REPORTS_DIR: reports
+  RELEASE_DIR: dist
+  TASK_CACHE_DIR: .task-cache
+  DENY_CARGO_HOME: "{{.TASK_CACHE_DIR}}/cargo-home"
+  DENY_CARGO_DENY_HOME: "{{.TASK_CACHE_DIR}}/cargo-deny"
+  FUZZ_TARGETS:
+
+tasks:
+  rust:components:stable:
+    desc: Install stable Rust components used by tasks
+    env:
+      RUSTUP_TOOLCHAIN: "{{.STABLE_TOOLCHAIN}}"
+    cmds:
+      - rustup component add --toolchain {{.STABLE_TOOLCHAIN}} rustfmt clippy llvm-tools-preview
+
+  rust:components:nightly:
+    desc: Install nightly Rust components used by tasks
+    env:
+      RUSTUP_TOOLCHAIN: "{{.NIGHTLY_TOOLCHAIN}}"
+    cmds:
+      - rustup component add --toolchain {{.NIGHTLY_TOOLCHAIN}} miri rust-src
+
+  default:
+    desc: Check & build
+    cmds:
+      - task: check
+      - task: build
+
+  build:
+    desc: Build the project
+    cmds:
+      - cargo +{{.STABLE_TOOLCHAIN}} build --locked
+
+  build:release:
+    desc: Build release artifacts
+    cmds:
+      - cargo +{{.STABLE_TOOLCHAIN}} build --release --locked
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - cargo clean
+      - rm -rf {{.TASK_CACHE_DIR}}
+
+  format:
+    desc: Verify Rust formatting
+    cmds:
+      - task: rust:components:stable
+      - cargo +{{.STABLE_TOOLCHAIN}} fmt --all --check
+
+  clippy:
+    desc: Run clippy with warnings denied
+    cmds:
+      - task: rust:components:stable
+      - cargo +{{.STABLE_TOOLCHAIN}} clippy --all-targets --all-features -- -D warnings
+
+  test:
+    desc: Run unit and integration tests
+    cmds:
+      - cargo +{{.STABLE_TOOLCHAIN}} test --all-targets --locked
+
+  audit:
+    desc: Audit dependencies for known vulnerabilities
+    cmds:
+      - cargo +{{.STABLE_TOOLCHAIN}} audit
+
+  deny:
+    desc: Run cargo-deny checks
+    cmds:
+      - mkdir -p {{.DENY_CARGO_HOME}} {{.DENY_CARGO_DENY_HOME}}
+      - CARGO_HOME={{.DENY_CARGO_HOME}} CARGO_DENY_HOME={{.DENY_CARGO_DENY_HOME}} cargo +{{.STABLE_TOOLCHAIN}} deny check
+
+  coverage:
+    desc: Generate coverage reports
+    cmds:
+      - task: rust:components:stable
+      - mkdir -p {{.REPORTS_DIR}}/coverage-html
+      - cargo +{{.STABLE_TOOLCHAIN}} llvm-cov --text --ignore-filename-regex '/test/' | tee {{.REPORTS_DIR}}/coverage.txt
+      - cargo +{{.STABLE_TOOLCHAIN}} llvm-cov --lcov --ignore-filename-regex '/test/' --output-path {{.REPORTS_DIR}}/coverage.lcov
+      - cargo +{{.STABLE_TOOLCHAIN}} llvm-cov --html --ignore-filename-regex '/test/' --output-dir {{.REPORTS_DIR}}/coverage-html
+
+  geiger:
+    desc: Report unsafe Rust usage (informational)
+    cmds:
+      - mkdir -p {{.REPORTS_DIR}}
+      - cargo +{{.STABLE_TOOLCHAIN}} geiger | tee {{.REPORTS_DIR}}/geiger.txt || true
+
+  miri:
+    desc: Check for UB
+    cmds:
+      - task: rust:components:nightly
+      - cargo +{{.NIGHTLY_TOOLCHAIN}} miri test
+
+  fuzz:all:
+    desc: Run fuzzer
+    run: always
+    env:
+      RUST_BACKTRACE: "1"
+    vars:
+      SANITIZER: address
+      MAX_LEN: 4096
+      TIMEOUT: 5
+      RSS_LIMIT_MB: 4096
+      USE_VALUE_PROFILE: 1
+      RUNS: 0
+      EXTRA_FLAGS: ""
+    cmds:
+      - for: {var: FUZZ_TARGETS}
+        cmd: >
+          cargo +{{.NIGHTLY_TOOLCHAIN}} fuzz run "{{trimSuffix ".rs" .ITEM}}"
+          --sanitizer {{.SANITIZER}} --
+          -runs={{.RUNS}}
+          -max_len={{.MAX_LEN}}
+          -timeout={{.TIMEOUT}}
+          -use_value_profile={{.USE_VALUE_PROFILE}}
+          -print_final_stats=1
+          {{.EXTRA_FLAGS}}
+
+  coupling:
+    desc: Run coupling checks
+    cmds:
+      - mkdir -p {{.REPORTS_DIR}}
+      - cargo +{{.STABLE_TOOLCHAIN}} coupling | tee {{.REPORTS_DIR}}/coupling.md
+
+  auditable:
+    desc: Build auditable release binary
+    cmds:
+      - mkdir -p {{.RELEASE_DIR}}
+      - cargo +{{.STABLE_TOOLCHAIN}} auditable build --release --locked
+      - cp target/release/hatch {{.RELEASE_DIR}}/hatch
+
+  bloat:
+    desc: Report release binary size contributors (informational)
+    cmds:
+      - mkdir -p {{.REPORTS_DIR}}
+      - cargo +{{.STABLE_TOOLCHAIN}} bloat --release --crates | tee {{.REPORTS_DIR}}/bloat.txt || true
+
+  ci:
+    desc: Run the fast CI gate
+    cmds:
+      - task: format
+      - task: clippy
+      - task: test
+      - task: deny
+      - task: build:release
+
+  release:
+    desc: Verify release inputs and build auditable artifacts
+    cmds:
+      - task: ci
+      - task: audit
+      - task: auditable
+
+  check:
+    desc: Run all configured checks, including heavyweight analysis
+    cmds:
+      - task: ci
+      - task: audit
+      - task: geiger
+      - task: miri
+      - task: fuzz:all
+      - task: coupling
+      - task: bloat
+      - task: coverage
