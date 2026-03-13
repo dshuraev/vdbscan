@@ -3,9 +3,11 @@ use std::num::NonZeroUsize;
 
 use crate::types::{ClusterLabel, Point3, VoxelIndex};
 
-pub fn dbscan(points: &[Point3], index: &VoxelIndex, min_pts: usize) -> Vec<ClusterLabel> {
+pub fn dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLabel> {
+    assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
+
+    let index = VoxelIndex::build(points, epsilon);
     let n = points.len();
-    let epsilon = index.epsilon();
     let mut labels: Vec<ClusterLabel> = vec![None; n];
     let mut visited = vec![false; n];
 
@@ -14,7 +16,7 @@ pub fn dbscan(points: &[Point3], index: &VoxelIndex, min_pts: usize) -> Vec<Clus
     for (i, p) in points.iter().enumerate() {
         let count = index
             .neighbors(index.key_of(p))
-            .filter(|&nb| points[nb].distance(*p) < epsilon)
+            .filter(|&nb| points[nb].distance(*p) <= epsilon)
             .count();
         if count >= min_pts {
             is_core[i] = true;
@@ -41,7 +43,7 @@ pub fn dbscan(points: &[Point3], index: &VoxelIndex, min_pts: usize) -> Vec<Clus
         while let Some(cur) = queue.pop_front() {
             let key = index.key_of(&points[cur]);
             for nb in index.neighbors(key) {
-                if !visited[nb] && points[nb].distance(points[cur]) < epsilon {
+                if !visited[nb] && points[nb].distance(points[cur]) <= epsilon {
                     visited[nb] = true;
                     labels[nb] = Some(cluster);
                     if is_core[nb] {
