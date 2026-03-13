@@ -89,7 +89,7 @@ impl VoxelIndex {
     pub fn neighbors(&self, key: VoxelKey) -> impl Iterator<Item = usize> + '_ {
         let VoxelKey(kx, ky, kz) = key;
         NEIGHBOR_OFFSETS.iter().flat_map(move |&(dx, dy, dz)| {
-            let neighbor = VoxelKey(kx + dx, ky + dy, kz + dz);
+            let neighbor = VoxelKey(kx.saturating_add(dx), ky.saturating_add(dy), kz.saturating_add(dz));
             self.cells
                 .get(&neighbor)
                 .map(Vec::as_slice)
