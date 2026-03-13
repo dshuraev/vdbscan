@@ -16,7 +16,7 @@ pub fn dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLab
     for (i, p) in points.iter().enumerate() {
         let count = index
             .neighbors(index.key_of(p))
-            .filter(|&nb| points[nb].distance(*p) <= epsilon)
+            .filter(|&nb| nb != i && points[nb].distance(*p) <= epsilon)
             .count();
         if count >= min_pts {
             is_core[i] = true;
