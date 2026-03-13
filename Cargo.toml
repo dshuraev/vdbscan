@@ -6,3 +6,11 @@ license = "MIT"
 
 [dependencies]
 ahash = "0.8.12"
+
+[[test]]
+name = "unit_types"
+path = "test/unit/types.rs"
+
+[[test]]
+name = "unit_dbscan"
+path = "test/unit/dbscan.rs"
