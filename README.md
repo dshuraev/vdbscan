@@ -83,14 +83,6 @@ cargo +1.89.0-x86_64-unknown-linux-gnu bench --locked -p vdbscan-kitti-bench --b
 
 Criterion emits a separate trace for each method and scan pair, so the HTML report shows side-by-side series such as `vdbscan/000000.bin`, `kiddo/000000.bin`, and `bruteforce/000000.bin`.
 
-For profiling, generate a flamegraph from the same KITTI input:
-
-```bash
-task perf:flamegraph KITTI_PATH=/data/kitti/velodyne KITTI_EPSILON=0.4 KITTI_MIN_PTS=5 KITTI_METHOD=kiddo
-```
-
-The flamegraph is written to `reports/perf/kitti.svg`.
-
 For text-first profiling and hot-line inspection, use `perf` against the dedicated profiling binary instead of the Criterion harness:
 
 ```bash
@@ -98,14 +90,13 @@ task perf:release KITTI_PATH=/data/kitti/velodyne KITTI_EPSILON=0.4 KITTI_MIN_PT
 task perf:debug KITTI_PATH=/data/kitti/velodyne KITTI_EPSILON=0.4 KITTI_MIN_PTS=5 KITTI_METHOD=bruteforce
 ```
 
-Outputs:
+`KITTI_METHOD` defaults to `vdbscan` when omitted. Outputs are written under `reports/perf/<method>/` and named with the short commit SHA, e.g.:
 
-- `reports/perf/kitti-release.perf.data` and `reports/perf/kitti-release.annotate.txt`
-- `reports/perf/kitti-debug.perf.data` and `reports/perf/kitti-debug.annotate.txt`
+- `reports/perf/vdbscan/kitti-release-a1b2c3d.perf.data`
+- `reports/perf/vdbscan/kitti-release-a1b2c3d.report.txt`
+- `reports/perf/vdbscan/kitti-release-a1b2c3d.annotate.txt`
 
 `perf:release` is the one to trust for real hotspots. `perf:debug` is mainly for easier source-level inspection.
-
-`profile_kitti` accepts `VDBSCAN_KITTI_METHOD` with `vdbscan`, `kiddo`, or `bruteforce`. If unset, profiling defaults to `vdbscan`.
 
 ## References
 
