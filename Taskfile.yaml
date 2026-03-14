@@ -5,6 +5,7 @@ vars:
   STABLE_TOOLCHAIN: 1.89.0-x86_64-unknown-linux-gnu
   NIGHTLY_TOOLCHAIN: nightly-2025-10-31-x86_64-unknown-linux-gnu
   REPORTS_DIR: reports
+  PERF_DIR: "{{.REPORTS_DIR}}/perf"
   RELEASE_DIR: dist
   TASK_CACHE_DIR: .task-cache
   DENY_CARGO_HOME: "{{.TASK_CACHE_DIR}}/cargo-home"
@@ -21,6 +22,9 @@ vars:
   CI_FUZZ_RUNS: "200000"
   CI_FUZZ_TIMEOUT: "10"
   CI_FUZZ_MAX_LEN: "4096"
+  KITTI_EPSILON: "0.4"
+  KITTI_MIN_PTS: "5"
+  KITTI_PROFILE_REPEATS: "10"
 
 tasks:
   # ---------------------------------------------------------------------------
@@ -147,6 +151,70 @@ tasks:
           -rss_limit_mb={{.RSS_LIMIT_MB}}
           -use_value_profile={{.USE_VALUE_PROFILE}}
           {{.EXTRA_FLAGS}}
+
+  # ---------------------------------------------------------------------------
+  # Benchmarks
+  # ---------------------------------------------------------------------------
+  bench:kitti:
+    desc: Benchmark DBSCAN against local KITTI Velodyne scans
+    requires:
+      vars: [KITTI_PATH]
+    env:
+      VDBSCAN_KITTI_PATH: "{{.KITTI_PATH}}"
+      VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
+      VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
+    cmds:
+      - cargo +{{.STABLE_TOOLCHAIN}} bench --locked -p vdbscan-kitti-bench --bench kitti
+
+  perf:debug:
+    desc: Record perf samples for the debug KITTI profiling binary
+    requires:
+      vars: [KITTI_PATH]
+    env:
+      VDBSCAN_KITTI_PATH: "{{.KITTI_PATH}}"
+      VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
+      VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
+      VDBSCAN_KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
+    cmds:
+      - mkdir -p {{.PERF_DIR}}
+      - >
+        perf record --call-graph dwarf -g -o {{.PERF_DIR}}/kitti-debug.perf.data
+        cargo +{{.STABLE_TOOLCHAIN}} run --locked -p vdbscan-kitti-bench --bin profile_kitti
+      - perf report --stdio -i {{.PERF_DIR}}/kitti-debug.perf.data > {{.PERF_DIR}}/kitti-debug.report.txt
+      - perf annotate --stdio -i {{.PERF_DIR}}/kitti-debug.perf.data > {{.PERF_DIR}}/kitti-debug.annotate.txt
+
+  perf:release:
+    desc: Record perf samples for the release KITTI profiling binary
+    requires:
+      vars: [KITTI_PATH]
+    env:
+      VDBSCAN_KITTI_PATH: "{{.KITTI_PATH}}"
+      VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
+      VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
+      VDBSCAN_KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
+    cmds:
+      - mkdir -p {{.PERF_DIR}}
+      - >
+        perf record --call-graph dwarf -g -o {{.PERF_DIR}}/kitti-release.perf.data
+        cargo +{{.STABLE_TOOLCHAIN}} run --locked --release -p vdbscan-kitti-bench --bin profile_kitti
+      - perf report --stdio -i {{.PERF_DIR}}/kitti-release.perf.data > {{.PERF_DIR}}/kitti-release.report.txt
+      - perf annotate --stdio -i {{.PERF_DIR}}/kitti-release.perf.data > {{.PERF_DIR}}/kitti-release.annotate.txt
+
+  perf:flamegraph:
+    desc: Generate a flamegraph for the release KITTI profiling binary
+    requires:
+      vars: [KITTI_PATH]
+    env:
+      VDBSCAN_KITTI_PATH: "{{.KITTI_PATH}}"
+      VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
+      VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
+      VDBSCAN_KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
+    cmds:
+      - mkdir -p {{.PERF_DIR}}
+      - >
+        cargo flamegraph -o {{.PERF_DIR}}/kitti.svg
+        -c "record -o {{.PERF_DIR}}/kitti-flamegraph.perf.data --call-graph dwarf -g"
+        -p vdbscan-kitti-bench --bin profile_kitti
 
   # ---------------------------------------------------------------------------
   # Analysis & reporting

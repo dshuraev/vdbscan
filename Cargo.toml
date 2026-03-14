@@ -1,3 +1,8 @@
+[workspace]
+members = ["benchmarks/kitti"]
+default-members = ["."]
+resolver = "3"
+
 [package]
 name = "vdbscan"
 version = "0.1.0"
@@ -6,6 +11,12 @@ license = "MIT"
 
 [dependencies]
 ahash = "0.8.12"
+
+[profile.release]
+debug = true
+
+[profile.bench]
+debug = true
 
 [[test]]
 name = "unit_types"
