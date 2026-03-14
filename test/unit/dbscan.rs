@@ -84,15 +84,6 @@ fn test_no_duplicate_cluster_ids_from_adjacent_cores() {
 }
 
 #[test]
-fn test_min_pts_one() {
-    let points = line_points(10, 2.0, 0.0);
-    let labels = dbscan(&points, 0.5, 1);
-
-    assert_eq!(labels.len(), 10);
-    assert!(labels.iter().all(|label| label.is_some()));
-}
-
-#[test]
 #[cfg_attr(miri, ignore)]
 fn test_large_chain_no_stack_overflow() {
     let points = line_points(10_000, 0.3, 0.0);

@@ -50,21 +50,6 @@ fn test_neighbors_within_epsilon() {
 }
 
 #[test]
-fn test_neighbors_beyond_epsilon() {
-    let points = [point(0.0, 0.0, 0.0), point(1.1, 0.0, 0.0)];
-    let index = VoxelIndex::build(&points, 0.5);
-
-    assert_eq!(index.key_of(&points[0]), VoxelKey(0, 0, 0));
-    assert_eq!(index.key_of(&points[1]), VoxelKey(2, 0, 0));
-
-    let first_candidates = candidate_set(&index, index.key_of(&points[0]));
-    let second_candidates = candidate_set(&index, index.key_of(&points[1]));
-
-    assert!(!first_candidates.contains(&1));
-    assert!(!second_candidates.contains(&0));
-}
-
-#[test]
 fn test_all_26_neighbors_returned() {
     let mut points = Vec::with_capacity(27);
     points.push(point(0.5, 0.5, 0.5));

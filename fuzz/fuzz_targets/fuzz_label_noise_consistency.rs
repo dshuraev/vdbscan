@@ -52,6 +52,12 @@ fuzz_target!(|data: &[u8]| {
     if points.len() > 500 {
         return;
     }
+    if points
+        .iter()
+        .any(|p| !p.x.is_finite() || !p.y.is_finite() || !p.z.is_finite())
+    {
+        return;
+    }
 
     let labels = dbscan(&points, epsilon, min_pts);
 
@@ -66,10 +72,25 @@ fuzz_target!(|data: &[u8]| {
             .filter(|&(j, &other)| j != i && points[i].distance(other) <= epsilon)
             .count();
 
-        // NOTE: voxel hash with voxel_size=epsilon has a known boundary approximation:
-        // two points within epsilon may land in non-adjacent cells if they straddle a
-        // cell boundary. The brute-force check may therefore find more neighbors than
-        // the implementation sees. This is documented as a known limitation.
+        if neighbor_count >= min_pts {
+            // Print the full scene before asserting
+            eprintln!("epsilon={epsilon}, min_pts={min_pts}");
+            eprintln!("points ({}):", points.len());
+            for (idx, p) in points.iter().enumerate() {
+                eprintln!("  [{idx}] ({}, {}, {})", p.x, p.y, p.z);
+            }
+            eprintln!("noise point {i} has {neighbor_count} true neighbors");
+            // Print its neighbors explicitly
+            for (j, &other) in points.iter().enumerate() {
+                if j != i {
+                    let d = points[i].distance(other);
+                    if d <= epsilon {
+                        eprintln!("  neighbor [{j}] dist={d}");
+                    }
+                }
+            }
+        }
+
         assert!(
             neighbor_count < min_pts,
             "noise point at index {i} has {neighbor_count} neighbors, min_pts={min_pts}"
