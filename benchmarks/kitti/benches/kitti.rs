@@ -20,17 +20,17 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.warm_up_time(Duration::from_secs(10));
 
     for scan_path in scan_paths {
-        let points = load_kitti_scan(&scan_path).unwrap_or_else(|err| {
+        let cloud = load_kitti_scan(&scan_path).unwrap_or_else(|err| {
             panic!("failed to load KITTI scan {}: {err}", scan_path.display())
         });
 
         for method in ALL_BENCHMARK_METHODS {
-            group.throughput(Throughput::Elements(points.len() as u64));
+            group.throughput(Throughput::Elements(cloud.len() as u64));
             group.bench_with_input(
                 BenchmarkId::new(method.slug(), scan_path.display().to_string()),
-                &points,
-                |b, points| {
-                    b.iter(|| method.cluster(points, config.epsilon(), config.min_pts));
+                &cloud,
+                |b, cloud| {
+                    b.iter(|| method.cluster(cloud.clone(), config.epsilon(), config.min_pts));
                 },
             );
         }

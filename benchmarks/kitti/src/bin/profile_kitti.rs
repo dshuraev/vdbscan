@@ -34,7 +34,7 @@ fn main() -> ExitCode {
 
     let scans = match scan_paths
         .iter()
-        .map(|path| load_kitti_scan(path).map(|points| (path, points)))
+        .map(|path| load_kitti_scan(path).map(|cloud| (path, cloud)))
         .collect::<Result<Vec<_>, _>>()
     {
         Ok(scans) => scans,
@@ -45,11 +45,11 @@ fn main() -> ExitCode {
     };
 
     for _ in 0..repeats {
-        for (_, points) in &scans {
+        for (_, cloud) in &scans {
             black_box(
                 config
                     .method
-                    .cluster(points, config.epsilon(), config.min_pts),
+                    .cluster(cloud.clone(), config.epsilon(), config.min_pts),
             );
         }
     }

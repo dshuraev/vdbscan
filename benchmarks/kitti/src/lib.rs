@@ -6,7 +6,9 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 use kiddo::{SquaredEuclidean, float::kdtree::KdTree as KiddoKdTree};
-use vdbscan::{ClusterLabel, Point3};
+#[cfg(test)]
+use vdbscan::Point3;
+use vdbscan::{ClusterLabel, Clustering, PointCloud};
 
 pub const DEFAULT_EPSILON: f32 = 0.4;
 pub const DEFAULT_MIN_PTS: usize = 5;
@@ -42,11 +44,11 @@ impl BenchmarkMethod {
         }
     }
 
-    pub fn cluster(self, points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLabel> {
+    pub fn cluster(self, cloud: PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
         match self {
-            Self::Vdbscan => vdbscan::dbscan(points, epsilon, min_pts),
-            Self::Kiddo => kiddo_dbscan(points, epsilon, min_pts),
-            Self::Bruteforce => brute_force_dbscan(points, epsilon, min_pts),
+            Self::Vdbscan => vdbscan::dbscan(cloud, epsilon, min_pts),
+            Self::Kiddo => kiddo_dbscan(&cloud, epsilon, min_pts),
+            Self::Bruteforce => brute_force_dbscan(&cloud, epsilon, min_pts),
         }
     }
 }
@@ -159,12 +161,12 @@ pub fn discover_scan_paths(path: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(scans)
 }
 
-pub fn load_kitti_scan(path: &Path) -> io::Result<Vec<Point3>> {
+pub fn load_kitti_scan(path: &Path) -> io::Result<PointCloud> {
     let bytes = fs::read(path)?;
     parse_kitti_scan(&bytes)
 }
 
-pub fn parse_kitti_scan(bytes: &[u8]) -> io::Result<Vec<Point3>> {
+pub fn parse_kitti_scan(bytes: &[u8]) -> io::Result<PointCloud> {
     if !bytes.len().is_multiple_of(KITTI_POINT_RECORD_LEN) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -175,15 +177,16 @@ pub fn parse_kitti_scan(bytes: &[u8]) -> io::Result<Vec<Point3>> {
         ));
     }
 
-    let mut points = Vec::with_capacity(bytes.len() / KITTI_POINT_RECORD_LEN);
+    let n = bytes.len() / KITTI_POINT_RECORD_LEN;
+    let mut cloud = PointCloud::with_capacity(n);
     for chunk in bytes.chunks_exact(KITTI_POINT_RECORD_LEN) {
         let x = f32::from_le_bytes(chunk[0..4].try_into().unwrap());
         let y = f32::from_le_bytes(chunk[4..8].try_into().unwrap());
         let z = f32::from_le_bytes(chunk[8..12].try_into().unwrap());
-        points.push(Point3 { x, y, z });
+        cloud.push(x, y, z);
     }
 
-    Ok(points)
+    Ok(cloud)
 }
 
 fn ensure_bin_extension(path: &Path) -> io::Result<()> {
@@ -197,54 +200,54 @@ fn ensure_bin_extension(path: &Path) -> io::Result<()> {
     ))
 }
 
-fn brute_force_dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLabel> {
+fn brute_force_dbscan(cloud: &PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
     assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
 
     let epsilon_sq = epsilon * epsilon;
-    dbscan_with_region_query(points, min_pts, |point_idx| {
-        let point = points[point_idx];
-        let mut neighbors = Vec::with_capacity(min_pts);
-        for (candidate_idx, candidate) in points.iter().enumerate() {
-            if candidate_idx != point_idx && point.distance_sq(*candidate) <= epsilon_sq {
-                neighbors.push(candidate_idx);
-            }
-        }
-        neighbors
-    })
+    let labels = dbscan_with_region_query(cloud.len(), min_pts, |point_idx| {
+        let p = cloud.get(point_idx);
+        (0..cloud.len())
+            .filter(|&j| j != point_idx && p.distance_sq(cloud.get(j)) <= epsilon_sq)
+            .collect()
+    });
+    Clustering {
+        cloud: cloud.clone(),
+        labels,
+    }
 }
 
-fn kiddo_dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLabel> {
+fn kiddo_dbscan(cloud: &PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
     assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
 
     let epsilon_sq = epsilon * epsilon;
     // KITTI scans can contain long runs of points with the same coordinate on a split axis.
     // The default kiddo alias uses a bucket size of 32, which panics on those distributions.
-    let mut tree: BenchmarkKdTree = BenchmarkKdTree::with_capacity(points.len());
-    for (idx, point) in points.iter().enumerate() {
-        tree.add(&[point.x, point.y, point.z], idx as u64);
+    let mut tree: BenchmarkKdTree = BenchmarkKdTree::with_capacity(cloud.len());
+    for idx in 0..cloud.len() {
+        let p = cloud.get(idx);
+        tree.add(&[p.x, p.y, p.z], idx as u64);
     }
 
-    dbscan_with_region_query(points, min_pts, |point_idx| {
-        let point = points[point_idx];
-        tree.within_unsorted::<SquaredEuclidean>(&[point.x, point.y, point.z], epsilon_sq)
+    let labels = dbscan_with_region_query(cloud.len(), min_pts, |point_idx| {
+        let p = cloud.get(point_idx);
+        tree.within_unsorted::<SquaredEuclidean>(&[p.x, p.y, p.z], epsilon_sq)
             .into_iter()
             .filter_map(|neighbor| {
                 let idx = neighbor.item as usize;
                 (idx != point_idx).then_some(idx)
             })
             .collect()
-    })
+    });
+    Clustering {
+        cloud: cloud.clone(),
+        labels,
+    }
 }
 
-fn dbscan_with_region_query<F>(
-    points: &[Point3],
-    min_pts: usize,
-    mut region_query: F,
-) -> Vec<ClusterLabel>
+fn dbscan_with_region_query<F>(n: usize, min_pts: usize, mut region_query: F) -> Vec<ClusterLabel>
 where
     F: FnMut(usize) -> Vec<usize>,
 {
-    let n = points.len();
     let mut labels: Vec<ClusterLabel> = vec![None; n];
     let mut visited = vec![false; n];
     let mut is_core = vec![false; n];
@@ -295,6 +298,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeSet, HashMap};
+
     use super::*;
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -314,6 +319,30 @@ mod tests {
         out
     }
 
+    fn make_cloud(pts: &[(f32, f32, f32)]) -> PointCloud {
+        let mut cloud = PointCloud::with_capacity(pts.len());
+        for &(x, y, z) in pts {
+            cloud.push(x, y, z);
+        }
+        cloud
+    }
+
+    /// Canonical cluster membership: set of sets of point coordinates (as bits),
+    /// independent of label IDs and point ordering.
+    fn cluster_sets(clustering: &Clustering) -> BTreeSet<BTreeSet<(u32, u32, u32)>> {
+        let mut map: HashMap<usize, BTreeSet<(u32, u32, u32)>> = HashMap::new();
+        for (p, label) in clustering.iter() {
+            if let Some(id) = label {
+                map.entry(id.get()).or_default().insert((
+                    p.x.to_bits(),
+                    p.y.to_bits(),
+                    p.z.to_bits(),
+                ));
+            }
+        }
+        map.into_values().collect()
+    }
+
     #[test]
     fn parse_kitti_scan_rejects_invalid_record_length() {
         let err = parse_kitti_scan(&[0u8; 15]).unwrap_err();
@@ -326,22 +355,24 @@ mod tests {
         bytes.extend_from_slice(&point_bytes(1.0, 2.0, 3.0, 0.5));
         bytes.extend_from_slice(&point_bytes(-4.0, 5.5, 6.25, 0.9));
 
-        let points = parse_kitti_scan(&bytes).unwrap();
+        let cloud = parse_kitti_scan(&bytes).unwrap();
 
+        assert_eq!(cloud.len(), 2);
         assert_eq!(
-            points,
-            vec![
-                Point3 {
-                    x: 1.0,
-                    y: 2.0,
-                    z: 3.0
-                },
-                Point3 {
-                    x: -4.0,
-                    y: 5.5,
-                    z: 6.25
-                }
-            ]
+            cloud.get(0),
+            Point3 {
+                x: 1.0,
+                y: 2.0,
+                z: 3.0
+            }
+        );
+        assert_eq!(
+            cloud.get(1),
+            Point3 {
+                x: -4.0,
+                y: 5.5,
+                z: 6.25
+            }
         );
     }
 
@@ -390,53 +421,35 @@ mod tests {
 
     #[test]
     fn all_benchmark_methods_match_on_small_fixture() {
-        let points = vec![
-            Point3 {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            Point3 {
-                x: 0.1,
-                y: 0.1,
-                z: 0.0,
-            },
-            Point3 {
-                x: 5.0,
-                y: 5.0,
-                z: 5.0,
-            },
-            Point3 {
-                x: 5.1,
-                y: 5.0,
-                z: 5.0,
-            },
-            Point3 {
-                x: 10.0,
-                y: 10.0,
-                z: 10.0,
-            },
-        ];
+        let cloud = make_cloud(&[
+            (0.0, 0.0, 0.0),
+            (0.1, 0.1, 0.0),
+            (5.0, 5.0, 5.0),
+            (5.1, 5.0, 5.0),
+            (10.0, 10.0, 10.0),
+        ]);
 
-        let expected = BenchmarkMethod::Vdbscan.cluster(&points, 0.25, 1);
+        let expected = cluster_sets(&BenchmarkMethod::Vdbscan.cluster(cloud.clone(), 0.25, 1));
         for method in ALL_BENCHMARK_METHODS {
-            assert_eq!(method.cluster(&points, 0.25, 1), expected, "{method:?}");
+            assert_eq!(
+                cluster_sets(&method.cluster(cloud.clone(), 0.25, 1)),
+                expected,
+                "{method:?}"
+            );
         }
     }
 
     #[test]
     fn kiddo_backend_handles_many_points_with_same_axis_value() {
-        let points = (0..128)
-            .map(|i| Point3 {
-                x: 0.0,
-                y: i as f32 * 0.01,
-                z: 0.0,
-            })
-            .collect::<Vec<_>>();
+        let mut cloud = PointCloud::with_capacity(128);
+        for i in 0..128 {
+            cloud.push(0.0, i as f32 * 0.01, 0.0);
+        }
+        let n = cloud.len();
 
-        let labels = BenchmarkMethod::Kiddo.cluster(&points, 0.02, 1);
+        let clustering = BenchmarkMethod::Kiddo.cluster(cloud, 0.02, 1);
 
-        assert_eq!(labels.len(), points.len());
-        assert!(labels.iter().any(Option::is_some));
+        assert_eq!(clustering.len(), n);
+        assert!(clustering.iter().any(|(_, l)| l.is_some()));
     }
 }
