@@ -117,7 +117,10 @@ pub fn benchmark_config_from_env() -> Result<BenchmarkConfig, ConfigError> {
         .unwrap_or(DEFAULT_MIN_PTS);
     let method = std::env::var(KITTI_METHOD_ENV)
         .ok()
-        .map(|raw| raw.parse::<BenchmarkMethod>().map_err(ConfigError::InvalidMethod))
+        .map(|raw| {
+            raw.parse::<BenchmarkMethod>()
+                .map_err(ConfigError::InvalidMethod)
+        })
         .transpose()?
         .unwrap_or(BenchmarkMethod::Vdbscan);
     Ok(BenchmarkConfig {
@@ -233,7 +236,11 @@ fn kiddo_dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterL
     })
 }
 
-fn dbscan_with_region_query<F>(points: &[Point3], min_pts: usize, mut region_query: F) -> Vec<ClusterLabel>
+fn dbscan_with_region_query<F>(
+    points: &[Point3],
+    min_pts: usize,
+    mut region_query: F,
+) -> Vec<ClusterLabel>
 where
     F: FnMut(usize) -> Vec<usize>,
 {

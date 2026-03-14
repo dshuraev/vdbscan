@@ -46,7 +46,11 @@ fn main() -> ExitCode {
 
     for _ in 0..repeats {
         for (_, points) in &scans {
-            black_box(config.method.cluster(points, config.epsilon(), config.min_pts));
+            black_box(
+                config
+                    .method
+                    .cluster(points, config.epsilon(), config.min_pts),
+            );
         }
     }
 
