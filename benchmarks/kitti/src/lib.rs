@@ -1,23 +1,77 @@
+use std::collections::VecDeque;
 use std::fmt;
 use std::fs;
 use std::io;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
-use vdbscan::Point3;
+use kiddo::{SquaredEuclidean, float::kdtree::KdTree as KiddoKdTree};
+use vdbscan::{ClusterLabel, Point3};
 
 pub const DEFAULT_EPSILON: f32 = 0.4;
 pub const DEFAULT_MIN_PTS: usize = 5;
 pub const KITTI_PATH_ENV: &str = "VDBSCAN_KITTI_PATH";
 pub const KITTI_EPSILON_ENV: &str = "VDBSCAN_KITTI_EPSILON";
 pub const KITTI_MIN_PTS_ENV: &str = "VDBSCAN_KITTI_MIN_PTS";
+pub const KITTI_METHOD_ENV: &str = "VDBSCAN_KITTI_METHOD";
 
 const KITTI_POINT_RECORD_LEN: usize = 16;
+const KIDDO_BUCKET_SIZE: usize = 2048;
+
+type BenchmarkKdTree = KiddoKdTree<f32, u64, 3, KIDDO_BUCKET_SIZE, u32>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BenchmarkMethod {
+    Vdbscan,
+    Kiddo,
+    Bruteforce,
+}
+
+pub const ALL_BENCHMARK_METHODS: [BenchmarkMethod; 3] = [
+    BenchmarkMethod::Vdbscan,
+    BenchmarkMethod::Kiddo,
+    BenchmarkMethod::Bruteforce,
+];
+
+impl BenchmarkMethod {
+    pub fn slug(self) -> &'static str {
+        match self {
+            Self::Vdbscan => "vdbscan",
+            Self::Kiddo => "kiddo",
+            Self::Bruteforce => "bruteforce",
+        }
+    }
+
+    pub fn cluster(self, points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLabel> {
+        match self {
+            Self::Vdbscan => vdbscan::dbscan(points, epsilon, min_pts),
+            Self::Kiddo => kiddo_dbscan(points, epsilon, min_pts),
+            Self::Bruteforce => brute_force_dbscan(points, epsilon, min_pts),
+        }
+    }
+}
+
+impl std::str::FromStr for BenchmarkMethod {
+    type Err = String;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        match raw {
+            "vdbscan" => Ok(Self::Vdbscan),
+            "kiddo" => Ok(Self::Kiddo),
+            "bruteforce" => Ok(Self::Bruteforce),
+            _ => Err(format!(
+                "invalid benchmark method {raw:?}; expected one of: vdbscan, kiddo, bruteforce"
+            )),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BenchmarkConfig {
     pub dataset_path: PathBuf,
     pub epsilon_bits: u32,
     pub min_pts: usize,
+    pub method: BenchmarkMethod,
 }
 
 impl BenchmarkConfig {
@@ -31,6 +85,7 @@ pub enum ConfigError {
     MissingPath,
     InvalidEpsilon(std::num::ParseFloatError),
     InvalidMinPts(std::num::ParseIntError),
+    InvalidMethod(String),
 }
 
 impl fmt::Display for ConfigError {
@@ -39,6 +94,7 @@ impl fmt::Display for ConfigError {
             Self::MissingPath => write!(f, "missing KITTI path; set {KITTI_PATH_ENV}"),
             Self::InvalidEpsilon(err) => write!(f, "invalid epsilon value: {err}"),
             Self::InvalidMinPts(err) => write!(f, "invalid min_pts value: {err}"),
+            Self::InvalidMethod(err) => write!(f, "{err}"),
         }
     }
 }
@@ -59,10 +115,16 @@ pub fn benchmark_config_from_env() -> Result<BenchmarkConfig, ConfigError> {
         .map(|raw| raw.parse::<usize>().map_err(ConfigError::InvalidMinPts))
         .transpose()?
         .unwrap_or(DEFAULT_MIN_PTS);
+    let method = std::env::var(KITTI_METHOD_ENV)
+        .ok()
+        .map(|raw| raw.parse::<BenchmarkMethod>().map_err(ConfigError::InvalidMethod))
+        .transpose()?
+        .unwrap_or(BenchmarkMethod::Vdbscan);
     Ok(BenchmarkConfig {
         dataset_path,
         epsilon_bits: epsilon.to_bits(),
         min_pts,
+        method,
     })
 }
 
@@ -130,6 +192,98 @@ fn ensure_bin_extension(path: &Path) -> io::Result<()> {
         io::ErrorKind::InvalidInput,
         format!("expected a .bin file, got {}", path.display()),
     ))
+}
+
+fn brute_force_dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLabel> {
+    assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
+
+    let epsilon_sq = epsilon * epsilon;
+    dbscan_with_region_query(points, min_pts, |point_idx| {
+        let point = points[point_idx];
+        let mut neighbors = Vec::with_capacity(min_pts);
+        for (candidate_idx, candidate) in points.iter().enumerate() {
+            if candidate_idx != point_idx && point.distance_sq(*candidate) <= epsilon_sq {
+                neighbors.push(candidate_idx);
+            }
+        }
+        neighbors
+    })
+}
+
+fn kiddo_dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLabel> {
+    assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
+
+    let epsilon_sq = epsilon * epsilon;
+    // KITTI scans can contain long runs of points with the same coordinate on a split axis.
+    // The default kiddo alias uses a bucket size of 32, which panics on those distributions.
+    let mut tree: BenchmarkKdTree = BenchmarkKdTree::with_capacity(points.len());
+    for (idx, point) in points.iter().enumerate() {
+        tree.add(&[point.x, point.y, point.z], idx as u64);
+    }
+
+    dbscan_with_region_query(points, min_pts, |point_idx| {
+        let point = points[point_idx];
+        tree.within_unsorted::<SquaredEuclidean>(&[point.x, point.y, point.z], epsilon_sq)
+            .into_iter()
+            .filter_map(|neighbor| {
+                let idx = neighbor.item as usize;
+                (idx != point_idx).then_some(idx)
+            })
+            .collect()
+    })
+}
+
+fn dbscan_with_region_query<F>(points: &[Point3], min_pts: usize, mut region_query: F) -> Vec<ClusterLabel>
+where
+    F: FnMut(usize) -> Vec<usize>,
+{
+    let n = points.len();
+    let mut labels: Vec<ClusterLabel> = vec![None; n];
+    let mut visited = vec![false; n];
+    let mut is_core = vec![false; n];
+    let mut neighbors_cache: Vec<Vec<usize>> = Vec::with_capacity(n);
+    let mut core_count = 0usize;
+
+    for i in 0..n {
+        let neighbors = region_query(i);
+        is_core[i] = neighbors.len() >= min_pts;
+        if is_core[i] {
+            core_count += 1;
+        }
+        neighbors_cache.push(neighbors);
+    }
+
+    let mut queue: VecDeque<usize> = VecDeque::with_capacity(core_count);
+    let mut next_id: usize = 1;
+
+    for i in 0..n {
+        if !is_core[i] || visited[i] {
+            continue;
+        }
+
+        let cluster = NonZeroUsize::new(next_id).unwrap();
+        next_id += 1;
+
+        visited[i] = true;
+        labels[i] = Some(cluster);
+        queue.push_back(i);
+
+        while let Some(cur) = queue.pop_front() {
+            for &neighbor in &neighbors_cache[cur] {
+                if visited[neighbor] {
+                    continue;
+                }
+
+                visited[neighbor] = true;
+                labels[neighbor] = Some(cluster);
+                if is_core[neighbor] {
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+    }
+
+    labels
 }
 
 #[cfg(test)]
@@ -209,6 +363,7 @@ mod tests {
             std::env::set_var(KITTI_PATH_ENV, "/tmp/scan.bin");
             std::env::set_var(KITTI_EPSILON_ENV, "0.75");
             std::env::set_var(KITTI_MIN_PTS_ENV, "9");
+            std::env::set_var(KITTI_METHOD_ENV, "kiddo");
         }
 
         let config = benchmark_config_from_env().unwrap();
@@ -216,11 +371,65 @@ mod tests {
         assert_eq!(config.dataset_path, PathBuf::from("/tmp/scan.bin"));
         assert_eq!(config.epsilon(), 0.75);
         assert_eq!(config.min_pts, 9);
+        assert_eq!(config.method, BenchmarkMethod::Kiddo);
 
         unsafe {
             std::env::remove_var(KITTI_PATH_ENV);
             std::env::remove_var(KITTI_EPSILON_ENV);
             std::env::remove_var(KITTI_MIN_PTS_ENV);
+            std::env::remove_var(KITTI_METHOD_ENV);
         }
+    }
+
+    #[test]
+    fn all_benchmark_methods_match_on_small_fixture() {
+        let points = vec![
+            Point3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            Point3 {
+                x: 0.1,
+                y: 0.1,
+                z: 0.0,
+            },
+            Point3 {
+                x: 5.0,
+                y: 5.0,
+                z: 5.0,
+            },
+            Point3 {
+                x: 5.1,
+                y: 5.0,
+                z: 5.0,
+            },
+            Point3 {
+                x: 10.0,
+                y: 10.0,
+                z: 10.0,
+            },
+        ];
+
+        let expected = BenchmarkMethod::Vdbscan.cluster(&points, 0.25, 1);
+        for method in ALL_BENCHMARK_METHODS {
+            assert_eq!(method.cluster(&points, 0.25, 1), expected, "{method:?}");
+        }
+    }
+
+    #[test]
+    fn kiddo_backend_handles_many_points_with_same_axis_value() {
+        let points = (0..128)
+            .map(|i| Point3 {
+                x: 0.0,
+                y: i as f32 * 0.01,
+                z: 0.0,
+            })
+            .collect::<Vec<_>>();
+
+        let labels = BenchmarkMethod::Kiddo.cluster(&points, 0.02, 1);
+
+        assert_eq!(labels.len(), points.len());
+        assert!(labels.iter().any(Option::is_some));
     }
 }

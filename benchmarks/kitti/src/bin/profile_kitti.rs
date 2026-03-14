@@ -1,7 +1,6 @@
 use std::hint::black_box;
 use std::process::ExitCode;
 
-use vdbscan::dbscan;
 use vdbscan_kitti_bench::{benchmark_config_from_env, discover_scan_paths, load_kitti_scan};
 
 const PROFILE_REPEATS_ENV: &str = "VDBSCAN_KITTI_PROFILE_REPEATS";
@@ -47,7 +46,7 @@ fn main() -> ExitCode {
 
     for _ in 0..repeats {
         for (_, points) in &scans {
-            black_box(dbscan(points, config.epsilon(), config.min_pts));
+            black_box(config.method.cluster(points, config.epsilon(), config.min_pts));
         }
     }
 

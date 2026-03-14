@@ -175,6 +175,7 @@ tasks:
       VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
       VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
       VDBSCAN_KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
+      VDBSCAN_KITTI_METHOD: "{{.KITTI_METHOD}}"
     cmds:
       - mkdir -p {{.PERF_DIR}}
       - >
@@ -192,6 +193,7 @@ tasks:
       VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
       VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
       VDBSCAN_KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
+      VDBSCAN_KITTI_METHOD: "{{.KITTI_METHOD}}"
     cmds:
       - mkdir -p {{.PERF_DIR}}
       - >
@@ -209,6 +211,7 @@ tasks:
       VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
       VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
       VDBSCAN_KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
+      VDBSCAN_KITTI_METHOD: "{{.KITTI_METHOD}}"
     cmds:
       - mkdir -p {{.PERF_DIR}}
       - >

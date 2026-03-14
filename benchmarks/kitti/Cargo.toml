@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+kiddo = "5.2.4"
 vdbscan = { path = "../.." }
 
 [dev-dependencies]
