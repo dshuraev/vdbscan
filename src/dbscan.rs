@@ -7,6 +7,7 @@ pub fn dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLab
     assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
 
     let index = VoxelIndex::build(points, epsilon);
+    let epsilon_sq = epsilon * epsilon;
     let n = points.len();
     let mut labels: Vec<ClusterLabel> = vec![None; n];
     let mut visited = vec![false; n];
@@ -16,7 +17,7 @@ pub fn dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLab
     for (i, p) in points.iter().enumerate() {
         let count = index
             .neighbors(index.key_of(p))
-            .filter(|&nb| nb != i && points[nb].distance(*p) <= epsilon)
+            .filter(|&nb| nb != i && points[nb].distance_sq(*p) <= epsilon_sq)
             .count();
         if count >= min_pts {
             is_core[i] = true;
@@ -43,7 +44,7 @@ pub fn dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLab
         while let Some(cur) = queue.pop_front() {
             let key = index.key_of(&points[cur]);
             for nb in index.neighbors(key) {
-                if !visited[nb] && points[nb].distance(points[cur]) <= epsilon {
+                if !visited[nb] && points[nb].distance_sq(points[cur]) <= epsilon_sq {
                     visited[nb] = true;
                     labels[nb] = Some(cluster);
                     if is_core[nb] {

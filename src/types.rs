@@ -11,11 +11,11 @@ pub struct Point3 {
 
 impl Point3 {
     #[inline]
-    pub fn distance(self, other: Point3) -> f32 {
+    pub fn distance_sq(self, other: Point3) -> f32 {
         let dx = self.x - other.x;
         let dy = self.y - other.y;
         let dz = self.z - other.z;
-        (dx * dx + dy * dy + dz * dz).sqrt()
+        dx * dx + dy * dy + dz * dz
     }
 }
 

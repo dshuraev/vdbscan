@@ -60,6 +60,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let labels = dbscan(&points, epsilon, min_pts);
+    let dist_sq = epsilon * epsilon;
 
     for (i, label) in labels.iter().enumerate() {
         if label.is_some() {
@@ -69,7 +70,7 @@ fuzz_target!(|data: &[u8]| {
         let neighbor_count = points
             .iter()
             .enumerate()
-            .filter(|&(j, &other)| j != i && points[i].distance(other) <= epsilon)
+            .filter(|&(j, &other)| j != i && points[i].distance_sq(other) <= dist_sq)
             .count();
 
         if neighbor_count >= min_pts {
@@ -83,8 +84,8 @@ fuzz_target!(|data: &[u8]| {
             // Print its neighbors explicitly
             for (j, &other) in points.iter().enumerate() {
                 if j != i {
-                    let d = points[i].distance(other);
-                    if d <= epsilon {
+                    let d = points[i].distance_sq(other);
+                    if d <= dist_sq {
                         eprintln!("  neighbor [{j}] dist={d}");
                     }
                 }
