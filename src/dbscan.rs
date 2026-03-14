@@ -1,14 +1,17 @@
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 
-use crate::types::{ClusterLabel, Point3, VoxelIndex};
+use crate::types::{ClusterLabel, Clustering, Point3, PointCloud, VoxelIndex};
 
-pub fn dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLabel> {
+pub fn dbscan(cloud: PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
     assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
 
-    let index = VoxelIndex::build(points, epsilon);
+    let n = cloud.len();
+    // Convert to AoS for internal processing; dbscan may reorder this freely.
+    let points: Vec<Point3> = cloud.iter().collect();
+
+    let index = VoxelIndex::build(&points, epsilon);
     let epsilon_sq = epsilon * epsilon;
-    let n = points.len();
     let mut labels: Vec<ClusterLabel> = vec![None; n];
     let mut visited = vec![false; n];
 
@@ -55,5 +58,13 @@ pub fn dbscan(points: &[Point3], epsilon: f32, min_pts: usize) -> Vec<ClusterLab
         }
     }
 
-    labels
+    let mut result = PointCloud::with_capacity(n);
+    for p in &points {
+        result.push(p.x, p.y, p.z);
+    }
+
+    Clustering {
+        cloud: result,
+        labels,
+    }
 }

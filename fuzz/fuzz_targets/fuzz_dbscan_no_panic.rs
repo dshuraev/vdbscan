@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use vdbscan::{dbscan, Point3};
+use vdbscan::{PointCloud, dbscan};
 
 fn clamp_epsilon(raw: f32) -> f32 {
     if raw.is_finite() {
@@ -15,20 +15,16 @@ fn clamp_min_pts(raw: u8) -> usize {
     usize::from(raw).clamp(1, 20)
 }
 
-fn point_from_bytes(chunk: &[u8]) -> Point3 {
-    let x = f32::from_le_bytes(chunk[0..4].try_into().unwrap());
-    let y = f32::from_le_bytes(chunk[4..8].try_into().unwrap());
-    let z = f32::from_le_bytes(chunk[8..12].try_into().unwrap());
-    Point3 { x, y, z }
-}
-
-fn parse_input(data: &[u8]) -> (Vec<Point3>, f32, usize) {
+fn parse_input(data: &[u8]) -> (PointCloud, f32, usize) {
     let point_len = data.len().saturating_sub(5);
     let point_len = point_len - (point_len % 12);
-    let points = data[..point_len]
-        .chunks_exact(12)
-        .map(point_from_bytes)
-        .collect();
+    let mut cloud = PointCloud::with_capacity(point_len / 12);
+    for chunk in data[..point_len].chunks_exact(12) {
+        let x = f32::from_le_bytes(chunk[0..4].try_into().unwrap());
+        let y = f32::from_le_bytes(chunk[4..8].try_into().unwrap());
+        let z = f32::from_le_bytes(chunk[8..12].try_into().unwrap());
+        cloud.push(x, y, z);
+    }
 
     let epsilon = if data.len() >= point_len + 4 {
         clamp_epsilon(f32::from_le_bytes(
@@ -44,11 +40,12 @@ fn parse_input(data: &[u8]) -> (Vec<Point3>, f32, usize) {
         .map(clamp_min_pts)
         .unwrap_or(5);
 
-    (points, epsilon, min_pts)
+    (cloud, epsilon, min_pts)
 }
 
 fuzz_target!(|data: &[u8]| {
-    let (points, epsilon, min_pts) = parse_input(data);
-    let labels = dbscan(&points, epsilon, min_pts);
-    assert_eq!(labels.len(), points.len());
+    let (cloud, epsilon, min_pts) = parse_input(data);
+    let n = cloud.len();
+    let clustering = dbscan(cloud, epsilon, min_pts);
+    assert_eq!(clustering.len(), n);
 });
