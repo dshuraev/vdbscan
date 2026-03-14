@@ -1,9 +1,7 @@
 use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use vdbscan_kitti_bench::{
-    ALL_BENCHMARK_METHODS, benchmark_config_from_env, discover_scan_paths, load_kitti_scan,
-};
+use vdbscan_kitti_bench::{benchmark_config_from_env, discover_scan_paths, load_kitti_scan};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let config = benchmark_config_from_env().unwrap_or_else(|err| panic!("{err}"));
@@ -24,16 +22,15 @@ fn criterion_benchmark(c: &mut Criterion) {
             panic!("failed to load KITTI scan {}: {err}", scan_path.display())
         });
 
-        for method in ALL_BENCHMARK_METHODS {
-            group.throughput(Throughput::Elements(cloud.len() as u64));
-            group.bench_with_input(
-                BenchmarkId::new(method.slug(), scan_path.display().to_string()),
-                &cloud,
-                |b, cloud| {
-                    b.iter(|| method.cluster(cloud.clone(), config.epsilon(), config.min_pts));
-                },
-            );
-        }
+        let method = config.method;
+        group.throughput(Throughput::Elements(cloud.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::new(method.slug(), scan_path.display().to_string()),
+            &cloud,
+            |b, cloud| {
+                b.iter(|| method.cluster(cloud.clone(), config.epsilon(), config.min_pts));
+            },
+        );
     }
 
     group.finish();

@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use vdbscan_kitti_bench::{benchmark_config_from_env, discover_scan_paths, load_kitti_scan};
 
-const PROFILE_REPEATS_ENV: &str = "VDBSCAN_KITTI_PROFILE_REPEATS";
+const PROFILE_REPEATS_ENV: &str = "KITTI_PROFILE_REPEATS";
 const DEFAULT_PROFILE_REPEATS: usize = 10;
 
 fn main() -> ExitCode {

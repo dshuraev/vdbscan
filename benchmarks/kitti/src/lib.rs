@@ -12,10 +12,10 @@ use vdbscan::{ClusterLabel, Clustering, PointCloud};
 
 pub const DEFAULT_EPSILON: f32 = 0.4;
 pub const DEFAULT_MIN_PTS: usize = 5;
-pub const KITTI_PATH_ENV: &str = "VDBSCAN_KITTI_PATH";
-pub const KITTI_EPSILON_ENV: &str = "VDBSCAN_KITTI_EPSILON";
-pub const KITTI_MIN_PTS_ENV: &str = "VDBSCAN_KITTI_MIN_PTS";
-pub const KITTI_METHOD_ENV: &str = "VDBSCAN_KITTI_METHOD";
+pub const KITTI_PATH_ENV: &str = "KITTI_PATH";
+pub const KITTI_EPSILON_ENV: &str = "KITTI_EPSILON";
+pub const KITTI_MIN_PTS_ENV: &str = "KITTI_MIN_PTS";
+pub const KITTI_METHOD_ENV: &str = "KITTI_METHOD";
 
 const KITTI_POINT_RECORD_LEN: usize = 16;
 const KIDDO_BUCKET_SIZE: usize = 2048;

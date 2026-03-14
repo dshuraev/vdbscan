@@ -161,9 +161,10 @@ tasks:
     requires:
       vars: [KITTI_PATH]
     env:
-      VDBSCAN_KITTI_PATH: "{{.KITTI_PATH}}"
-      VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
-      VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
+      KITTI_PATH: "{{.KITTI_PATH}}"
+      KITTI_EPSILON: "{{.KITTI_EPSILON}}"
+      KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
+      KITTI_METHOD: "{{.KITTI_METHOD}}"
     cmds:
       - cargo +{{.STABLE_TOOLCHAIN}} bench --locked -p vdbscan-kitti-bench --bench kitti
 
@@ -175,11 +176,11 @@ tasks:
       GIT_SHA:
         sh: git rev-parse --short HEAD
     env:
-      VDBSCAN_KITTI_PATH: "{{.KITTI_PATH}}"
-      VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
-      VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
-      VDBSCAN_KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
-      VDBSCAN_KITTI_METHOD: "{{.KITTI_METHOD}}"
+      KITTI_PATH: "{{.KITTI_PATH}}"
+      KITTI_EPSILON: "{{.KITTI_EPSILON}}"
+      KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
+      KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
+      KITTI_METHOD: "{{.KITTI_METHOD}}"
     cmds:
       - mkdir -p {{.PERF_DIR}}/{{.KITTI_METHOD}}
       - >
@@ -197,11 +198,11 @@ tasks:
       GIT_SHA:
         sh: git rev-parse --short HEAD
     env:
-      VDBSCAN_KITTI_PATH: "{{.KITTI_PATH}}"
-      VDBSCAN_KITTI_EPSILON: "{{.KITTI_EPSILON}}"
-      VDBSCAN_KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
-      VDBSCAN_KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
-      VDBSCAN_KITTI_METHOD: "{{.KITTI_METHOD}}"
+      KITTI_PATH: "{{.KITTI_PATH}}"
+      KITTI_EPSILON: "{{.KITTI_EPSILON}}"
+      KITTI_MIN_PTS: "{{.KITTI_MIN_PTS}}"
+      KITTI_PROFILE_REPEATS: "{{.KITTI_PROFILE_REPEATS}}"
+      KITTI_METHOD: "{{.KITTI_METHOD}}"
     cmds:
       - mkdir -p {{.PERF_DIR}}/{{.KITTI_METHOD}}
       - >
