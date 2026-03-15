@@ -1,85 +1,160 @@
-use std::collections::BTreeSet;
+use std::num::NonZeroUsize;
+use vdbscan::{ClusterLabel, Clustering, Point3, PointCloud};
 
-use vdbscan::{Point3, VoxelIndex, VoxelKey};
+// ---------------------------------------------------------------------------
+// Point3
+// ---------------------------------------------------------------------------
 
-fn point(x: f32, y: f32, z: f32) -> Point3 {
-    Point3 { x, y, z }
-}
-
-fn candidate_set(index: &VoxelIndex, key: VoxelKey) -> BTreeSet<usize> {
-    index.neighbors(key).collect()
+#[test]
+fn test_distance_sq_zero() {
+    let p = Point3 {
+        x: 1.0,
+        y: 2.0,
+        z: 3.0,
+    };
+    assert_eq!(p.distance_sq(p), 0.0);
 }
 
 #[test]
-fn test_key_origin() {
-    let points = [point(0.0, 0.0, 0.0), point(0.49, 0.49, 0.49)];
-    let index = VoxelIndex::build(&points, 0.5);
-
-    assert_eq!(index.key_of(&points[0]), VoxelKey(0, 0, 0));
-    assert_eq!(index.key_of(&points[1]), VoxelKey(0, 0, 0));
+fn test_distance_sq_axis_aligned() {
+    let a = Point3 {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    let b = Point3 {
+        x: 3.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    assert_eq!(a.distance_sq(b), 9.0);
 }
 
 #[test]
-fn test_key_boundary() {
-    let points = [point(0.5, 0.0, 0.0)];
-    let index = VoxelIndex::build(&points, 0.5);
-
-    assert_eq!(index.key_of(&points[0]), VoxelKey(1, 0, 0));
-    assert_ne!(index.key_of(&points[0]), VoxelKey(0, 0, 0));
+fn test_distance_sq_symmetric() {
+    let a = Point3 {
+        x: 1.0,
+        y: 2.0,
+        z: 3.0,
+    };
+    let b = Point3 {
+        x: 4.0,
+        y: 6.0,
+        z: 3.0,
+    };
+    assert_eq!(a.distance_sq(b), b.distance_sq(a));
 }
 
-#[test]
-fn test_key_negative_floor() {
-    let points = [point(-0.1, 0.0, 0.0)];
-    let index = VoxelIndex::build(&points, 0.5);
-
-    assert_eq!(index.key_of(&points[0]), VoxelKey(-1, 0, 0));
-    assert_ne!(index.key_of(&points[0]), VoxelKey(0, 0, 0));
-}
+// ---------------------------------------------------------------------------
+// PointCloud
+// ---------------------------------------------------------------------------
 
 #[test]
-fn test_neighbors_within_epsilon() {
-    let points = [point(0.0, 0.0, 0.0), point(0.4, 0.0, 0.0)];
-    let index = VoxelIndex::build(&points, 0.5);
+fn test_cloud_push_and_get() {
+    let mut cloud = PointCloud::new();
+    cloud.push(1.0, 2.0, 3.0);
+    cloud.push(-1.0, 0.5, 7.0);
 
-    let first_candidates = candidate_set(&index, index.key_of(&points[0]));
-    let second_candidates = candidate_set(&index, index.key_of(&points[1]));
-
-    assert!(first_candidates.contains(&1));
-    assert!(second_candidates.contains(&0));
-}
-
-#[test]
-fn test_all_26_neighbors_returned() {
-    let mut points = Vec::with_capacity(27);
-    points.push(point(0.5, 0.5, 0.5));
-
-    for dx in -1..=1 {
-        for dy in -1..=1 {
-            for dz in -1..=1 {
-                if dx == 0 && dy == 0 && dz == 0 {
-                    continue;
-                }
-                points.push(point(dx as f32 + 0.5, dy as f32 + 0.5, dz as f32 + 0.5));
-            }
+    assert_eq!(cloud.len(), 2);
+    assert_eq!(
+        cloud.get(0),
+        Point3 {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0
         }
-    }
-
-    let index = VoxelIndex::build(&points, 1.0);
-    let center_key = index.key_of(&points[0]);
-    let candidates = candidate_set(&index, center_key);
-
-    assert_eq!(center_key, VoxelKey(0, 0, 0));
-    assert_eq!(candidates.len(), 27);
-    assert!(candidates.contains(&0));
-    assert_eq!(candidates.into_iter().skip(1).count(), 26);
+    );
+    assert_eq!(
+        cloud.get(1),
+        Point3 {
+            x: -1.0,
+            y: 0.5,
+            z: 7.0
+        }
+    );
 }
 
 #[test]
-fn test_empty_cloud() {
-    let points: [Point3; 0] = [];
-    let index = VoxelIndex::build(&points, 0.5);
+fn test_cloud_is_empty() {
+    let cloud = PointCloud::new();
+    assert!(cloud.is_empty());
 
-    assert_eq!(index.epsilon(), 0.5);
-    assert_eq!(index.neighbors(VoxelKey(0, 0, 0)).count(), 0);
+    let mut cloud = PointCloud::with_capacity(4);
+    assert!(cloud.is_empty());
+    cloud.push(0.0, 0.0, 0.0);
+    assert!(!cloud.is_empty());
+}
+
+#[test]
+fn test_cloud_iter_matches_get() {
+    let mut cloud = PointCloud::new();
+    for i in 0..5 {
+        cloud.push(i as f32, i as f32 * 2.0, 0.0);
+    }
+    let from_iter: Vec<Point3> = cloud.iter().collect();
+    let from_get: Vec<Point3> = (0..cloud.len()).map(|i| cloud.get(i)).collect();
+    assert_eq!(from_iter, from_get);
+}
+
+// ---------------------------------------------------------------------------
+// Clustering
+// ---------------------------------------------------------------------------
+
+fn make_clustering(pts: &[(f32, f32, f32)], labels: &[Option<usize>]) -> Clustering {
+    let mut cloud = PointCloud::with_capacity(pts.len());
+    for &(x, y, z) in pts {
+        cloud.push(x, y, z);
+    }
+    let labels = labels
+        .iter()
+        .map(|&id| id.and_then(NonZeroUsize::new))
+        .collect();
+    Clustering { cloud, labels }
+}
+
+#[test]
+fn test_clustering_len() {
+    let c = make_clustering(&[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], &[Some(1), None]);
+    assert_eq!(c.len(), 2);
+}
+
+#[test]
+fn test_clustering_cluster_count() {
+    let c = make_clustering(
+        &[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (5.0, 0.0, 0.0)],
+        &[Some(1), Some(1), Some(2)],
+    );
+    assert_eq!(c.cluster_count(), 2);
+}
+
+#[test]
+fn test_clustering_noise_count() {
+    let c = make_clustering(
+        &[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (5.0, 0.0, 0.0)],
+        &[Some(1), None, None],
+    );
+    assert_eq!(c.noise_count(), 2);
+}
+
+#[test]
+fn test_clustering_iter_correspondence() {
+    let pts = [(0.0f32, 0.0, 0.0), (1.0, 2.0, 3.0)];
+    let c = make_clustering(&pts, &[Some(1), Some(2)]);
+    let pairs: Vec<(Point3, ClusterLabel)> = c.iter().collect();
+    assert_eq!(
+        pairs[0].0,
+        Point3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0
+        }
+    );
+    assert_eq!(
+        pairs[1].0,
+        Point3 {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0
+        }
+    );
 }

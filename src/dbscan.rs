@@ -1,29 +1,29 @@
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 
-use crate::types::{ClusterLabel, Clustering, Point3, PointCloud, VoxelIndex};
+use crate::morton::MortonIndex;
+use crate::types::{ClusterLabel, Clustering, PointCloud};
 
 pub fn dbscan(cloud: PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
     assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
 
     let n = cloud.len();
-    // Convert to AoS for internal processing; dbscan may reorder this freely.
-    let points: Vec<Point3> = cloud.iter().collect();
-
-    let index = VoxelIndex::build(&points, epsilon);
+    let index = MortonIndex::build(cloud, epsilon);
     let epsilon_sq = epsilon * epsilon;
     let mut labels: Vec<ClusterLabel> = vec![None; n];
     let mut visited = vec![false; n];
 
     // First pass: mark core points.
     let mut is_core = vec![false; n];
-    for (i, p) in points.iter().enumerate() {
+    for (i, core) in is_core.iter_mut().enumerate() {
+        let p = index.sorted_cloud.get(i);
         let count = index
-            .neighbors(index.key_of(p))
-            .filter(|&nb| nb != i && points[nb].distance_sq(*p) <= epsilon_sq)
+            .candidates(i)
+            .filter(|&nb| nb != i)
+            .filter(|&nb| index.sorted_cloud.get(nb).distance_sq(p) <= epsilon_sq)
             .count();
         if count >= min_pts {
-            is_core[i] = true;
+            *core = true;
         }
     }
 
@@ -45,9 +45,9 @@ pub fn dbscan(cloud: PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
         queue.push_back(i);
 
         while let Some(cur) = queue.pop_front() {
-            let key = index.key_of(&points[cur]);
-            for nb in index.neighbors(key) {
-                if !visited[nb] && points[nb].distance_sq(points[cur]) <= epsilon_sq {
+            let p = index.sorted_cloud.get(cur);
+            for nb in index.candidates(cur) {
+                if !visited[nb] && index.sorted_cloud.get(nb).distance_sq(p) <= epsilon_sq {
                     visited[nb] = true;
                     labels[nb] = Some(cluster);
                     if is_core[nb] {
@@ -58,13 +58,8 @@ pub fn dbscan(cloud: PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
         }
     }
 
-    let mut result = PointCloud::with_capacity(n);
-    for p in &points {
-        result.push(p.x, p.y, p.z);
-    }
-
     Clustering {
-        cloud: result,
+        cloud: index.sorted_cloud,
         labels,
     }
 }
