@@ -41,46 +41,35 @@ use crate::types::PointCloud;
 /// |--------|-----------|
 /// | 1      | 27        |
 /// | 2      | 125       |
-/// | 3      | 343       |
 ///
 /// With `voxel_size = eps`, radius **2** is the minimum correct value.
 /// A point at the far edge of its voxel can have a neighbor that sits at the
 /// far edge of the voxel two steps away and still be within `eps`.
 ///
-/// Select at build time via Cargo features `neighbor-radius-1` or
-/// `neighbor-radius-3`; the default is **2**.  If both are enabled
-/// simultaneously (e.g. `cargo clippy --all-features`), `neighbor-radius-1`
-/// takes precedence.
-// Priority: neighbor-radius-1 > neighbor-radius-3 > default (2).
-// Each branch is mutually exclusive so exactly one definition is always active,
-// even when both features are enabled (e.g. --all-features in CI).
-#[cfg(feature = "neighbor-radius-1")]
+/// Select the reduced `3×3×3` search at build time with the
+/// `reduced_neighborhood` Cargo feature; the default is radius **2**
+/// (`5×5×5`).
+#[cfg(feature = "reduced_neighborhood")]
 pub const NEIGHBOR_RADIUS: i32 = 1;
 
-#[cfg(all(not(feature = "neighbor-radius-1"), feature = "neighbor-radius-3"))]
-pub const NEIGHBOR_RADIUS: i32 = 3;
-
-#[cfg(not(any(feature = "neighbor-radius-1", feature = "neighbor-radius-3")))]
+#[cfg(not(feature = "reduced_neighborhood"))]
 pub const NEIGHBOR_RADIUS: i32 = 2;
 
 /// Inline capacity of [`NeighborList`].
 ///
-/// Rounded up to the nearest size supported by `smallvec::Array` (which only
-/// covers specific values).  The inline capacity is always ≥ the true maximum
-/// (`cube_width³`), so heap allocation is avoided for any valid neighbor list.
+/// Chosen to be at least the theoretical maximum (`cube_width³`) for the
+/// configured radius so heap allocation is avoided for any valid neighbor
+/// list. `smallvec` only implements its array trait for a fixed set of sizes,
+/// so the default `125`-entry neighborhood uses the next supported size.
 ///
 /// | Radius | True max | Inline cap |
 /// |--------|----------|------------|
 /// | 1      | 27       | 27         |
 /// | 2      | 125      | 128        |
-/// | 3      | 343      | 512        |
-#[cfg(feature = "neighbor-radius-1")]
+#[cfg(feature = "reduced_neighborhood")]
 const MAX_NEIGHBORS: usize = 27;
 
-#[cfg(all(not(feature = "neighbor-radius-1"), feature = "neighbor-radius-3"))]
-const MAX_NEIGHBORS: usize = 512;
-
-#[cfg(not(any(feature = "neighbor-radius-1", feature = "neighbor-radius-3")))]
+#[cfg(not(feature = "reduced_neighborhood"))]
 const MAX_NEIGHBORS: usize = 128;
 
 /// Neighbor span list for one voxel span.
