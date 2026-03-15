@@ -1,5 +1,5 @@
 [workspace]
-members = ["benchmarks/kitti"]
+members = ["benchmarks/kitti", "vdbscan-cli"]
 default-members = ["."]
 resolver = "3"
 
