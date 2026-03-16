@@ -80,6 +80,16 @@ tasks:
       - for: { var: BUILD_TARGETS }
         cmd: cargo +{{.STABLE_TOOLCHAIN}} build --release --locked --target {{.ITEM}}
 
+  build:cli:
+    desc: Debug build of the vdbscan CLI binary (native)
+    cmds:
+      - cargo +{{.STABLE_TOOLCHAIN}} build --locked -p vdbscan-cli
+
+  build:cli:release:
+    desc: Release build of the vdbscan CLI binary (native)
+    cmds:
+      - cargo +{{.STABLE_TOOLCHAIN}} build --release --locked -p vdbscan-cli
+
   clean:
     desc: Remove build artifacts
     cmds:
