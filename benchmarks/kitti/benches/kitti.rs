@@ -28,7 +28,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             BenchmarkId::new(method.slug(), scan_path.display().to_string()),
             &cloud,
             |b, cloud| {
-                b.iter(|| method.cluster(cloud.clone(), config.epsilon(), config.min_pts));
+                b.iter(|| method.cluster(cloud, config.epsilon(), config.min_pts));
             },
         );
     }

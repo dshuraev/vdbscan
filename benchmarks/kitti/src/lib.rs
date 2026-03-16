@@ -44,9 +44,9 @@ impl BenchmarkMethod {
         }
     }
 
-    pub fn cluster(self, cloud: PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
+    pub fn cluster(self, cloud: &PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
         match self {
-            Self::Vdbscan => vdbscan::dbscan(cloud, epsilon, min_pts),
+            Self::Vdbscan => vdbscan::dbscan(&cloud, epsilon, min_pts),
             Self::Kiddo => kiddo_dbscan(&cloud, epsilon, min_pts),
             Self::Bruteforce => brute_force_dbscan(&cloud, epsilon, min_pts),
         }
@@ -429,10 +429,10 @@ mod tests {
             (10.0, 10.0, 10.0),
         ]);
 
-        let expected = cluster_sets(&BenchmarkMethod::Vdbscan.cluster(cloud.clone(), 0.25, 1));
+        let expected = cluster_sets(&BenchmarkMethod::Vdbscan.cluster(&cloud, 0.25, 1));
         for method in ALL_BENCHMARK_METHODS {
             assert_eq!(
-                cluster_sets(&method.cluster(cloud.clone(), 0.25, 1)),
+                cluster_sets(&method.cluster(&cloud, 0.25, 1)),
                 expected,
                 "{method:?}"
             );
@@ -447,7 +447,7 @@ mod tests {
         }
         let n = cloud.len();
 
-        let clustering = BenchmarkMethod::Kiddo.cluster(cloud, 0.02, 1);
+        let clustering = BenchmarkMethod::Kiddo.cluster(&cloud, 0.02, 1);
 
         assert_eq!(clustering.len(), n);
         assert!(clustering.iter().any(|(_, l)| l.is_some()));

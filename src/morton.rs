@@ -40,37 +40,19 @@ use crate::types::PointCloud;
 /// | Radius | Cube size |
 /// |--------|-----------|
 /// | 1      | 27        |
-/// | 2      | 125       |
 ///
-/// With `voxel_size = eps`, radius **2** is the minimum correct value.
-/// A point at the far edge of its voxel can have a neighbor that sits at the
-/// far edge of the voxel two steps away and still be within `eps`.
-///
-/// Select the reduced `3×3×3` search at build time with the
-/// `reduced_neighborhood` Cargo feature; the default is radius **2**
-/// (`5×5×5`).
-#[cfg(feature = "reduced_neighborhood")]
 pub const NEIGHBOR_RADIUS: i32 = 1;
-
-#[cfg(not(feature = "reduced_neighborhood"))]
-pub const NEIGHBOR_RADIUS: i32 = 2;
 
 /// Inline capacity of [`NeighborList`].
 ///
 /// Chosen to be at least the theoretical maximum (`cube_width³`) for the
 /// configured radius so heap allocation is avoided for any valid neighbor
-/// list. `smallvec` only implements its array trait for a fixed set of sizes,
-/// so the default `125`-entry neighborhood uses the next supported size.
+/// list.
 ///
 /// | Radius | True max | Inline cap |
 /// |--------|----------|------------|
 /// | 1      | 27       | 27         |
-/// | 2      | 125      | 128        |
-#[cfg(feature = "reduced_neighborhood")]
 const MAX_NEIGHBORS: usize = 27;
-
-#[cfg(not(feature = "reduced_neighborhood"))]
-const MAX_NEIGHBORS: usize = 128;
 
 /// Neighbor span list for one voxel span.
 ///
@@ -291,9 +273,11 @@ impl MortonIndex {
     /// Build a `MortonIndex` using binary search for neighbor span lookups.
     ///
     /// # Parameters
-    /// - `cloud`: input point cloud (consumed and reordered into Morton order)
-    /// - `eps`: DBSCAN search radius; also used as the voxel size
-    pub fn build(cloud: PointCloud, eps: f32) -> Self {
+    /// - `cloud`: input point cloud (read-only; copied into Morton order)
+    /// - `eps`: DBSCAN search radius; the voxel size is chosen as the next
+    ///   representable value above `eps` so the fixed `3×3×3` neighborhood
+    ///   remains sound
+    pub fn build(cloud: &PointCloud, eps: f32) -> Self {
         Self::build_with_lookup(cloud, eps, &BinarySearchLookup)
     }
 
@@ -302,9 +286,9 @@ impl MortonIndex {
     /// Provide a different [`SpanLookup`] implementation to benchmark
     /// alternatives (hash lookup, linear scan, …) without changing the build
     /// logic.
-    pub fn build_with_lookup<L: SpanLookup>(cloud: PointCloud, eps: f32, lookup: &L) -> Self {
+    pub fn build_with_lookup<L: SpanLookup>(cloud: &PointCloud, eps: f32, lookup: &L) -> Self {
         let n = cloud.len();
-        let inv = 1.0_f32 / eps;
+        let inv = (1.0_f32 / eps).next_down();
 
         if n == 0 {
             return Self {
@@ -377,15 +361,15 @@ impl MortonIndex {
         // ------------------------------------------------------------------
         // Step 6 — precompute neighbor spans
         //
-        // Neighbor radius derivation (with voxel_size = eps):
-        //   A point at position p sits in voxel floor(p/eps).
-        //   A neighbor at position q is in voxel floor(q/eps).
-        //   The voxel offset d = floor(q/eps) - floor(p/eps).
+        // Neighbor radius derivation:
+        //   A point at position p sits in voxel floor(p/voxel_size).
+        //   A neighbor at position q is in voxel floor(q/voxel_size).
+        //   The voxel offset d = floor(q/voxel_size) - floor(p/voxel_size).
         //   The minimum distance between any point in voxel 0 and any point
-        //   in voxel d is max(0, (d-1)*eps) (1D).
-        //   For this to be ≤ eps: d ≤ 2.
-        //   General formula: d ≤ floor(eps/voxel_size) + 1.
-        //   With voxel_size = eps: d ≤ 2 → NEIGHBOR_RADIUS = 2 by default.
+        //   in voxel d is max(0, (d-1)*voxel_size) (1D).
+        //   For this to be ≤ eps: d ≤ floor(eps/voxel_size) + 1.
+        //   With voxel_size slightly larger than eps, d ≤ 1, so the fixed
+        //   NEIGHBOR_RADIUS = 1 is sound.
         //
         // The representative point of a span is sorted_cloud[span.start].
         // Re-quantizing it recovers the voxel coordinates without storing

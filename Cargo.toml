@@ -9,13 +9,6 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
-[features]
-# Neighbor search radius (voxels in each direction).
-# With voxel_size = eps, radius 2 is the minimum correct value:
-# a point at the far edge of its voxel can have a neighbor at edge of voxel+2.
-# Cube sizes: reduced_neighborhood → 27 cells, default → 125 cells.
-reduced_neighborhood = []  # 3×3×3 — only correct when voxel_size ≤ eps/2
-
 [dependencies]
 smallvec = "1"
 

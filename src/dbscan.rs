@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use crate::morton::MortonIndex;
 use crate::types::{ClusterLabel, Clustering, PointCloud};
 
-pub fn dbscan(cloud: PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
+pub fn dbscan(cloud: &PointCloud, epsilon: f32, min_pts: usize) -> Clustering {
     assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
 
     let n = cloud.len();

@@ -98,9 +98,9 @@ The naïve approach compares every point pair — O(N²) distance evaluations. T
 | Method       | Complexity                                                                     |
 | ------------ | ------------------------------------------------------------------------------ |
 | Naïve DBSCAN | O(N²) distance comparisons                                                     |
-| `vdbscan`    | O(N) index build + O(N·k) labeling, k = average candidates per 125-cell window |
+| `vdbscan`    | O(N) index build + O(N·k) labeling, k = average candidates per 27-cell window  |
 
-The 5×5×5 window is the safe default to ensure solution *always* converges with brute force approach when fuzzing as voxel side length is defined as ε, a 3×3×3 window (27 cells) is sufficient and can be enabled with the `reduced_neighborhood` feature.
+`vdbscan` always searches a fixed `3×3×3` voxel neighborhood (27 cells). To keep that search complete for `ε`-radius queries, the voxel size is chosen as the next representable `f32` value above `ε`.
 
 ### Morton (Z-order) encoding
 
@@ -109,7 +109,7 @@ Voxel lookup efficiency depends on how voxels are stored. A naive hash map incur
 1. Each voxel's integer coordinates (vx, vy, vz) are encoded into a single 63-bit key by interleaving the bits of all three axes.
 2. Points are sorted by Morton key, so spatially close voxels land close together in the sorted array — exploiting cache lines for neighbor traversal.
 3. Consecutive runs of the same key are compressed into **voxel spans** (start index + length).
-4. For each span, the 125 neighboring spans are precomputed once at index-build time. Candidate iteration during clustering never searches — it just walks a precomputed list of span pointers.
+4. For each span, the 27 neighboring spans are precomputed once at index-build time. Candidate iteration during clustering never searches — it just walks a precomputed list of span pointers.
 
 Binary search over the sorted span array finds any voxel in O(log V) where V is the number of occupied voxels. Because the index is built O(N) overall (sort dominates), the total clustering cost is O(N log N) in the worst case and O(N) in practice for typical point clouds where V ≪ N.
 
@@ -178,7 +178,7 @@ Reports are written to `reports/perf/<method>/kitti-<profile>-<sha>.(perf.data|r
 
 - **Parallel index build.** The sort and span-compression passes in `MortonIndex::build` are single-threaded. Radix sort and parallel prefix-sum are natural fits.
 - **GPU acceleration.** Morton encoding and the core-point counting pass are embarrassingly parallel and map cleanly to compute shaders or CUDA kernels.
-- **Adaptive voxel size.** At very low point densities the 125-cell window sees many empty voxels. A multi-resolution index (octree-style) could skip empty levels.
+- **Adaptive voxel size.** At very low point densities even the 27-cell window can waste work on empty voxels. A multi-resolution index (octree-style) could skip empty levels.
 - **Streaming / incremental updates.** Re-inserting a batch of new points without rebuilding the full index from scratch.
 - **Additional I/O formats.** PCD (ROS), LAS/LAZ (aerial LiDAR), E57.
 - **Python bindings.** PyO3 wrapper exposing `dbscan(numpy_xyz, epsilon, min_pts) -> numpy_labels`.

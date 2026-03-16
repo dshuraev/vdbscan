@@ -187,7 +187,10 @@ pub fn read_ply(path: &Path) -> Result<PointCloud> {
                 bail!("PLY: list properties in the vertex element are not supported");
             }
             ["property", ty, name] if in_vertex => {
-                props.push(PlyProp { name: name.to_string(), ty: PlyType::from_str(ty)? });
+                props.push(PlyProp {
+                    name: name.to_string(),
+                    ty: PlyType::from_str(ty)?,
+                });
             }
             _ => {}
         }
@@ -219,7 +222,11 @@ pub fn read_ply(path: &Path) -> Result<PointCloud> {
             let mut lines = text.lines().filter(|l| !l.trim().is_empty());
             for v in 0..vertex_count {
                 let line = lines.next().ok_or_else(|| {
-                    anyhow!("PLY: unexpected end of data at vertex {} (expected {})", v, vertex_count)
+                    anyhow!(
+                        "PLY: unexpected end of data at vertex {} (expected {})",
+                        v,
+                        vertex_count
+                    )
                 })?;
                 let cols: Vec<&str> = line.split_whitespace().collect();
                 if cols.len() < props.len() {
@@ -230,15 +237,15 @@ pub fn read_ply(path: &Path) -> Result<PointCloud> {
                         props.len()
                     );
                 }
-                let x = cols[x_idx]
-                    .parse::<f32>()
-                    .with_context(|| format!("PLY: vertex {}: cannot parse x '{}'", v, cols[x_idx]))?;
-                let y = cols[y_idx]
-                    .parse::<f32>()
-                    .with_context(|| format!("PLY: vertex {}: cannot parse y '{}'", v, cols[y_idx]))?;
-                let z = cols[z_idx]
-                    .parse::<f32>()
-                    .with_context(|| format!("PLY: vertex {}: cannot parse z '{}'", v, cols[z_idx]))?;
+                let x = cols[x_idx].parse::<f32>().with_context(|| {
+                    format!("PLY: vertex {}: cannot parse x '{}'", v, cols[x_idx])
+                })?;
+                let y = cols[y_idx].parse::<f32>().with_context(|| {
+                    format!("PLY: vertex {}: cannot parse y '{}'", v, cols[y_idx])
+                })?;
+                let z = cols[z_idx].parse::<f32>().with_context(|| {
+                    format!("PLY: vertex {}: cannot parse z '{}'", v, cols[z_idx])
+                })?;
                 cloud.push(x, y, z);
             }
         }

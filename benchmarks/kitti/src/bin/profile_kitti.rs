@@ -49,7 +49,7 @@ fn main() -> ExitCode {
             black_box(
                 config
                     .method
-                    .cluster(cloud.clone(), config.epsilon(), config.min_pts),
+                    .cluster(cloud, config.epsilon(), config.min_pts),
             );
         }
     }

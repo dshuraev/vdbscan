@@ -70,10 +70,7 @@ fn detect_output_format(path: &Path) -> Result<OutputFormat> {
     match path.extension().and_then(|e| e.to_str()) {
         Some("ply") => Ok(OutputFormat::Ply),
         Some("csv") => Ok(OutputFormat::Csv),
-        Some(ext) => bail!(
-            "unknown output extension '.{}'; supported: .ply, .csv",
-            ext
-        ),
+        Some(ext) => bail!("unknown output extension '.{}'; supported: .ply, .csv", ext),
         None => bail!(
             "cannot detect output format: '{}' has no file extension; supported: .ply, .csv",
             path.display()
@@ -96,7 +93,7 @@ fn main() -> Result<()> {
             .with_context(|| format!("failed to read CSV/XYZ file '{}'", args.input.display()))?,
     };
 
-    let clustering = dbscan(cloud, args.epsilon, args.min_pts);
+    let clustering = dbscan(&cloud, args.epsilon, args.min_pts);
 
     match output_fmt {
         OutputFormat::Ply => output::write_ply(&args.output, &clustering)

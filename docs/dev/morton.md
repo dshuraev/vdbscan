@@ -172,8 +172,7 @@ Example:
 | 2      | 125       |
 
 Make `neighbor_radius` a configurable (build-time) constant. In this codebase,
-the default build uses radius `2` (`5x5x5`), and the optional
-`reduced_neighborhood` feature switches to radius `1` (`3x3x3`).
+the implementation uses radius `1` (`3x3x3`).
 
 1. Enumerate all neighbor voxel coordinates in the cube.
 
@@ -315,7 +314,6 @@ O(V * K * log V)
 Typical values of `K`:
 
 * `27` for radius 1
-* `125` for radius 2
 
 ### Clustering Phase
 

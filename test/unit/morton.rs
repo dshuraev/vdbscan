@@ -139,13 +139,28 @@ fn test_voxelize_batch_floor_negative() {
     assert_eq!(vx, [-1, -1, -2]);
 }
 
+#[test]
+fn test_build_uses_voxel_size_slightly_larger_than_eps() {
+    let eps = 1.0f32;
+
+    let mut cloud = PointCloud::new();
+    cloud.push(0.0, 0.0, 0.0);
+    cloud.push(1.0, 0.0, 0.0);
+
+    let index = MortonIndex::build(&cloud, eps);
+
+    assert_eq!(index.voxel_spans.len(), 1);
+    assert_eq!(index.voxel_spans[0].len, 2);
+}
+
 // ---------------------------------------------------------------------------
 // MortonIndex build
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_build_empty_cloud() {
-    let index = MortonIndex::build(PointCloud::new(), 1.0);
+    let cloud = PointCloud::new();
+    let index = MortonIndex::build(&cloud, 1.0);
     assert!(index.sorted_cloud.is_empty());
     assert!(index.voxel_spans.is_empty());
     assert!(index.point_span_lut.is_empty());
@@ -156,7 +171,7 @@ fn test_build_empty_cloud() {
 fn test_build_single_point() {
     let mut cloud = PointCloud::new();
     cloud.push(0.5, 0.5, 0.5);
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     assert_eq!(index.sorted_cloud.len(), 1);
     assert_eq!(index.voxel_spans.len(), 1);
@@ -174,7 +189,7 @@ fn test_same_voxel_is_one_span() {
     cloud.push(0.1, 0.1, 0.1);
     cloud.push(0.5, 0.5, 0.5);
     cloud.push(0.9, 0.9, 0.9);
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     assert_eq!(index.voxel_spans.len(), 1);
     assert_eq!(index.voxel_spans[0].len, 3);
@@ -187,7 +202,7 @@ fn test_separate_voxels_produce_separate_spans() {
     cloud.push(0.5, 0.5, 0.5); // voxel (0,0,0)
     cloud.push(1.5, 0.5, 0.5); // voxel (1,0,0)
     cloud.push(2.5, 0.5, 0.5); // voxel (2,0,0)
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     assert_eq!(index.voxel_spans.len(), 3);
     assert_eq!(index.sorted_cloud.len(), 3);
@@ -207,7 +222,7 @@ fn test_span_lengths_sum_to_n() {
         }
     }
     let n = cloud.len();
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     let total: usize = index.voxel_spans.iter().map(|s| s.len).sum();
     assert_eq!(total, n);
@@ -220,7 +235,7 @@ fn test_point_span_lut_is_consistent() {
     for i in 0..20 {
         cloud.push(i as f32 * 0.3, (i % 3) as f32, 0.0);
     }
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     for i in 0..index.sorted_cloud.len() {
         let span_idx = index.point_span_lut[i];
@@ -247,7 +262,7 @@ fn test_sorted_cloud_contains_all_input_points() {
         .map(|&(x, y, z)| (x.to_bits(), y.to_bits(), z.to_bits()))
         .collect();
 
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
     let sorted: BTreeSet<(u32, u32, u32)> = (0..index.sorted_cloud.len())
         .map(|i| {
             let p = index.sorted_cloud.get(i);
@@ -267,7 +282,7 @@ fn test_sorted_cloud_contains_all_input_points() {
 fn test_neighbors_include_self() {
     let mut cloud = PointCloud::new();
     cloud.push(0.5, 0.5, 0.5);
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     assert!(
         index.neighbors[0].contains(&0),
@@ -281,7 +296,7 @@ fn test_adjacent_voxels_are_mutual_neighbors() {
     let mut cloud = PointCloud::new();
     cloud.push(0.5, 0.5, 0.5); // voxel (0,0,0)
     cloud.push(1.5, 0.5, 0.5); // voxel (1,0,0)
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     assert_eq!(index.voxel_spans.len(), 2);
 
@@ -322,7 +337,7 @@ fn test_distant_voxels_are_not_neighbors() {
     let mut cloud = PointCloud::new();
     cloud.push(0.5, 0.5, 0.5);
     cloud.push(0.5 + gap, 0.5, 0.5);
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     assert_eq!(index.voxel_spans.len(), 2);
     assert!(
@@ -340,7 +355,7 @@ fn test_distant_voxels_are_not_neighbors() {
 fn test_candidates_include_self() {
     let mut cloud = PointCloud::new();
     cloud.push(0.5, 0.5, 0.5);
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     let cands: Vec<usize> = index.candidates(0).collect();
     assert!(cands.contains(&0));
@@ -352,7 +367,7 @@ fn test_candidates_span_adjacent_voxel() {
     let mut cloud = PointCloud::new();
     cloud.push(0.5, 0.5, 0.5); // voxel A
     cloud.push(1.5, 0.5, 0.5); // voxel B (adjacent)
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     // Find which sorted index holds the point at x=0.5.
     let idx_a = (0..2)
@@ -381,7 +396,7 @@ fn test_candidates_indices_are_in_bounds() {
         cloud.push(i as f32 * 0.4, (i % 4) as f32 * 0.4, 0.0);
     }
     let n = cloud.len();
-    let index = MortonIndex::build(cloud, 1.0);
+    let index = MortonIndex::build(&cloud, 1.0);
 
     for i in 0..n {
         for c in index.candidates(i) {
@@ -413,8 +428,8 @@ fn test_custom_lookup_matches_binary_search() {
     }
 
     let cloud2 = cloud.clone();
-    let default_idx = MortonIndex::build(cloud, 1.0);
-    let custom_idx = MortonIndex::build_with_lookup(cloud2, 1.0, &LinearScanLookup);
+    let default_idx = MortonIndex::build(&cloud, 1.0);
+    let custom_idx = MortonIndex::build_with_lookup(&cloud2, 1.0, &LinearScanLookup);
 
     assert_eq!(default_idx.voxel_spans.len(), custom_idx.voxel_spans.len());
     for (a, b) in default_idx
