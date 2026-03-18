@@ -174,6 +174,17 @@ task perf:debug   KITTI_PATH=/data/kitti/velodyne KITTI_METHOD=bruteforce
 
 Reports are written to `reports/perf/<method>/kitti-<profile>-<sha>.(perf.data|report.txt|annotate.txt)`.
 
+## Status
+
+Core algorithm:
+
+- [x] Core types (`Point3`, `PointCloud`, `ClusterLabel`)
+- [x] Morton index, 27-cell neighborhood lookup
+- [x] `dbscan` - core-point + BFS
+- [x] ~95% test coverage
+- [x] Fuzzing
+- [x] Benchmarks
+
 ## Future work
 
 - **Parallel index build.** The sort and span-compression passes in `MortonIndex::build` are single-threaded. Radix sort and parallel prefix-sum are natural fits.

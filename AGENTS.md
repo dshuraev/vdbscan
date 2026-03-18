@@ -1,4 +1,4 @@
-# agents.md
+# AGENTS.md
 
 This document defines how agents—human and automated—operate within this codebase.  
 It follows **Extreme Programming (XP)** principles and adopts **Conventional Commits** for clear traceability.
