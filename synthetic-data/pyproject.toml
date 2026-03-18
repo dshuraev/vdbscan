@@ -1,0 +1,13 @@
+[project]
+name = "synthetic-data"
+version = "0.1.0"
+description = "Syntetic 3D cloud data generation"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "typer>=0.12",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+synthetic-data = "main:app"
