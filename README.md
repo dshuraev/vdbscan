@@ -163,7 +163,7 @@ I/O and parsing happen outside the timed section. See [benchmarks/kitti/README.m
 task bench:kitti KITTI_PATH=/data/kitti/velodyne KITTI_EPSILON=0.4 KITTI_MIN_PTS=5
 ```
 
-Criterion writes an HTML report under `target/criterion/`. Each (method, scan) pair is a separate series, e.g. `vdbscan/000000.bin`, `kiddo/000000.bin`, `bruteforce/000000.bin`.
+Criterion writes an HTML report under `target/criterion/`.
 
 For hot-line profiling with `perf`:
 

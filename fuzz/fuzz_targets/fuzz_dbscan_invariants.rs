@@ -47,7 +47,7 @@ fn parse_input(data: &[u8]) -> (PointCloud, f32, usize) {
 
 fuzz_target!(|data: &[u8]| {
     let (cloud, epsilon, min_pts) = parse_input(data);
-    let clustering = dbscan(cloud, epsilon, min_pts);
+    let clustering = dbscan(&cloud, epsilon, min_pts);
 
     let cluster_ids: BTreeSet<usize> =
         clustering.labels.iter().flatten().map(|id| id.get()).collect();

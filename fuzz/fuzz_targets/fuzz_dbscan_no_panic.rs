@@ -46,6 +46,6 @@ fn parse_input(data: &[u8]) -> (PointCloud, f32, usize) {
 fuzz_target!(|data: &[u8]| {
     let (cloud, epsilon, min_pts) = parse_input(data);
     let n = cloud.len();
-    let clustering = dbscan(cloud, epsilon, min_pts);
+    let clustering = dbscan(&cloud, epsilon, min_pts);
     assert_eq!(clustering.len(), n);
 });

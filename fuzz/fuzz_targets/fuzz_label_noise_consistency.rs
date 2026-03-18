@@ -52,7 +52,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let clustering = dbscan(cloud, epsilon, min_pts);
+    let clustering = dbscan(&cloud, epsilon, min_pts);
     let dist_sq = epsilon * epsilon;
 
     // Collect output points for neighbor counting.

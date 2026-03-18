@@ -30,7 +30,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let n = cloud.len();
-    let index = MortonIndex::build(cloud, eps);
+    let index = MortonIndex::build(&cloud, eps);
 
     // Exercise the candidates iterator for every point; must not panic.
     for i in 0..n {
