@@ -1,4 +1,5 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
+use std::collections::HashMap;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use vdbscan::Clustering;
@@ -36,6 +37,46 @@ pub fn write_ply(path: &Path, clustering: &Clustering) -> Result<()> {
         w.write_all(&[r, g, b])?;
     }
 
+    Ok(())
+}
+
+/// Write clustering as multiple XYZ files into `dir`: `noise.xyz` and `cluster_N.xyz` (1-based).
+pub fn write_xyz_multi(dir: &Path, clustering: &Clustering) -> Result<()> {
+    if dir.exists() && !dir.is_dir() {
+        bail!("'{}' exists and is not a directory", dir.display());
+    }
+    std::fs::create_dir_all(dir)?;
+
+    // Bucket points by label.
+    let mut noise: Vec<(f32, f32, f32)> = Vec::new();
+    let mut clusters: HashMap<usize, Vec<(f32, f32, f32)>> = HashMap::new();
+
+    for (pt, label) in clustering.iter() {
+        match label {
+            None => noise.push((pt.x, pt.y, pt.z)),
+            Some(id) => clusters.entry(id.get()).or_default().push((pt.x, pt.y, pt.z)),
+        }
+    }
+
+    // Write noise.xyz (always, even if empty).
+    write_xyz_file(&dir.join("noise.xyz"), &noise)?;
+
+    // Write cluster_N.xyz in sorted order.
+    let mut ids: Vec<usize> = clusters.keys().copied().collect();
+    ids.sort_unstable();
+    for id in ids {
+        write_xyz_file(&dir.join(format!("cluster_{}.xyz", id)), &clusters[&id])?;
+    }
+
+    Ok(())
+}
+
+fn write_xyz_file(path: &Path, points: &[(f32, f32, f32)]) -> Result<()> {
+    let file = std::fs::File::create(path)?;
+    let mut w = BufWriter::new(file);
+    for &(x, y, z) in points {
+        writeln!(w, "{} {} {}", x, y, z)?;
+    }
     Ok(())
 }
 

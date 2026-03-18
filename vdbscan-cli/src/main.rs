@@ -29,6 +29,10 @@ struct Args {
     /// Override input format detection
     #[arg(long = "input-format")]
     input_format: Option<InputFormat>,
+
+    /// Write each cluster to a separate file in the output directory (noise.xyz, cluster_N.xyz)
+    #[arg(short = 'm', long = "multi-file")]
+    multi_file: bool,
 }
 
 #[derive(Clone, clap::ValueEnum)]
@@ -82,7 +86,6 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     let input_fmt = detect_input_format(&args.input, args.input_format.as_ref())?;
-    let output_fmt = detect_output_format(&args.output)?;
 
     let cloud = match input_fmt {
         InputFormat::Kitti => input::read_kitti(&args.input)
@@ -95,11 +98,17 @@ fn main() -> Result<()> {
 
     let clustering = dbscan(&cloud, args.epsilon, args.min_pts);
 
-    match output_fmt {
-        OutputFormat::Ply => output::write_ply(&args.output, &clustering)
-            .with_context(|| format!("failed to write PLY file '{}'", args.output.display()))?,
-        OutputFormat::Csv => output::write_csv(&args.output, &clustering)
-            .with_context(|| format!("failed to write CSV file '{}'", args.output.display()))?,
+    if args.multi_file {
+        output::write_xyz_multi(&args.output, &clustering)
+            .with_context(|| format!("failed to write multi-file output to '{}'", args.output.display()))?;
+    } else {
+        let output_fmt = detect_output_format(&args.output)?;
+        match output_fmt {
+            OutputFormat::Ply => output::write_ply(&args.output, &clustering)
+                .with_context(|| format!("failed to write PLY file '{}'", args.output.display()))?,
+            OutputFormat::Csv => output::write_csv(&args.output, &clustering)
+                .with_context(|| format!("failed to write CSV file '{}'", args.output.display()))?,
+        }
     }
 
     Ok(())
